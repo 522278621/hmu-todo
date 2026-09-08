@@ -187,6 +187,38 @@
       line-height: 1.5;
       color: var(--text);
       word-break: break-word;
+      cursor: text;
+    }
+
+    .todo-edit-input {
+      width: 100%;
+      border: none;
+      border-bottom: 2px solid var(--accent);
+      padding: 2px 0;
+      font-size: 16px;
+      line-height: 1.5;
+      font-family: var(--font);
+      background: transparent;
+      color: var(--text);
+      outline: none;
+    }
+
+    .edit-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-light);
+      margin-top: 4px;
+    }
+    .edit-hint kbd {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: var(--font);
+      font-size: 10px;
+      color: var(--text-light);
     }
 
     .todo-card.done .todo-text {
@@ -603,8 +635,8 @@
           card.innerHTML = `
             <div class="checkbox ${todo.done ? 'checked' : ''}" onclick="toggleDone(${todo.id})"></div>
             <div class="todo-content">
-              <div class="todo-text">${escapeHtml(todo.text)}</div>
-              <div class="todo-time">${formatTime(todo.createdAt)}</div>
+              <div class="todo-text" onclick="startEdit(${todo.id}, this, event)">${escapeHtml(todo.text)}</div>
+              <div class="todo-time">${formatTime(todo.createdAt)}${todo.updatedAt ? ' \u00b7 已修改 ' + formatTime(todo.updatedAt) : ''}</div>
             </div>
             <button class="btn-delete" onclick="deleteTodo(${todo.id})" title="删除">\u00d7</button>
           `;
@@ -683,6 +715,69 @@
       render();
 
       showToast(todo.done ? '已标记完成' : '已取消完成');
+    }
+
+    function startEdit(id, textEl, ev) {
+      if (ev) {
+        ev.stopPropagation();
+        ev.preventDefault();
+      }
+      const todo = todos.find(t => t.id === id);
+      if (!todo || textEl.querySelector('input')) return;
+
+      const originalText = todo.text;
+      textEl.dataset.original = originalText;
+      textEl.innerHTML = `<input type="text" class="todo-edit-input" value="${escapeHtml(todo.text)}" maxlength="200" enterkeyhint="done">`;
+      const input = textEl.querySelector('input');
+      input.focus();
+      input.select();
+
+      // 显示操作提示
+      const timeEl = textEl.nextElementSibling;
+      const hint = document.createElement('div');
+      hint.className = 'edit-hint';
+      hint.innerHTML = '<kbd>完成</kbd>保存 <kbd>取消</kbd>退出';
+      if (timeEl) timeEl.after(hint);
+
+      let handled = false;
+
+      function finish(commit) {
+        if (handled) return;
+        handled = true;
+        const newText = input.value.trim();
+        if (commit) {
+          if (!newText) {
+            showToast('内容不能为空');
+            render();
+            return;
+          }
+          if (newText !== originalText) {
+            todo.text = newText;
+            todo.updatedAt = Date.now();
+            saveTodos();
+            showToast('已修改');
+          }
+        }
+        render();
+      }
+
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finish(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+
+      input.addEventListener('blur', function() {
+        setTimeout(() => finish(true), 120);
+      });
+
+      input.addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
     }
 
     function deleteTodo(id) {
